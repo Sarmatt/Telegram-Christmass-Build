@@ -27,9 +27,10 @@
     </div>
 
     <script>
-      var canvas = document.querySelector('#unity-canvas');
+      var canvas = document.querySelector("#unity-canvas");
+
       function unityShowBanner(msg, type) {
-        var warningBanner = document.querySelector('#unity-warning');
+        var warningBanner = document.querySelector("#unity-warning");
         function updateBannerVisibility() {
           warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
         }
@@ -47,17 +48,17 @@
         updateBannerVisibility();
       }
 
-      var buildUrl = 'Build';
-      var loaderUrl = buildUrl + '/Telegram-Christmass-Build.loader.js';
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/Telegram-Christmass-Build.loader.js";
       var config = {
         arguments: [],
-        dataUrl: buildUrl + '/Telegram-Christmass-Build.data',
-        frameworkUrl: buildUrl + '/Telegram-Christmass-Build.framework.js',
-        codeUrl: buildUrl + '/Telegram-Christmass-Build.wasm',
-        streamingAssetsUrl: 'StreamingAssets',
-        companyName: 'DefaultCompany',
-        productName: 'Telegram Christmass',
-        productVersion: '0.0.2',
+        dataUrl: buildUrl + "/Telegram-Christmass-Build.data",
+        frameworkUrl: buildUrl + "/Telegram-Christmass-Build.framework.js",
+        codeUrl: buildUrl + "/Telegram-Christmass-Build.wasm",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "DefaultCompany",
+        productName: "Telegram Christmass",
+        productVersion: "0.0.2",
         showBanner: unityShowBanner,
       };
 
@@ -66,25 +67,27 @@
         meta.name = 'viewport';
         meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
         document.getElementsByTagName('head')[0].appendChild(meta);
-        document.querySelector('#unity-container').className = 'unity-mobile';
-        canvas.className = 'unity-mobile';
+        document.querySelector("#unity-container").className = "unity-mobile";
+        canvas.className = "unity-mobile";
       } else {
-        canvas.style.width = '960px';
-        canvas.style.height = '600px';
+        canvas.style.width = "960px";
+        canvas.style.height = "600px";
       }
 
-      document.querySelector('#unity-loading-bar').style.display = 'block';
-      var script = document.createElement('script');
+      document.querySelector("#unity-loading-bar").style.display = "block";
+
+      var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
-          document.querySelector('#unity-progress-bar-full').style.width = 100 * progress + '%';
+          document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
         }).then((unityInstance) => {
-          document.querySelector('#unity-loading-bar').style.display = 'none';
-          document.querySelector('#unity-fullscreen-button').onclick = () => {
+          document.querySelector("#unity-loading-bar").style.display = "none";
+          document.querySelector("#unity-fullscreen-button").onclick = () => {
             unityInstance.SetFullscreen(1);
           };
 
+          /* ✅ Telegram Auth Sync */
           let retryAttempts = 0;
           const maxRetries = 5;
           const retryDelay = 1000;
@@ -92,15 +95,15 @@
           function trySendTelegramData() {
             if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe) {
               const initData = Telegram.WebApp.initDataUnsafe;
-              if (unityInstance && typeof unityInstance.SendMessage === 'function') {
-                unityInstance.SendMessage('UserAuthHandler', 'OnTelegramAuth', JSON.stringify(initData));
-                console.log('📨 Data sent to Unity.');
+              if (unityInstance && typeof unityInstance.SendMessage === "function") {
+                unityInstance.SendMessage("UserAuthHandler", "OnTelegramAuth", JSON.stringify(initData));
+                console.log("📨 Data sent to Unity.");
               } else {
-                console.warn('⚠️ Unity instance not ready. Retrying...');
+                console.warn("⚠️ Unity instance not ready. Retrying...");
                 retry();
               }
             } else {
-              console.warn('⚠️ Telegram WebApp data not ready. Retrying...');
+              console.warn("⚠️ Telegram WebApp data not ready. Retrying...");
               retry();
             }
           }
@@ -110,15 +113,36 @@
             if (retryAttempts <= maxRetries) {
               setTimeout(trySendTelegramData, retryDelay);
             } else {
-              console.error('❌ Failed to get Telegram data after max retries.');
+              console.error("❌ Failed to get Telegram data after max retries.");
             }
           }
 
           trySendTelegramData();
+
+          /* ✅ AUDIO UNLOCK FIX for iOS / Telegram */
+          document.addEventListener('touchstart', function onFirstTouch() {
+            try {
+              if (unityInstance && unityInstance.Module && unityInstance.Module.resumeAudioContext) {
+                unityInstance.Module.resumeAudioContext();
+                console.log("🎧 Unity audio resumed via Module");
+              }
+              const Ctx = window.AudioContext || window.webkitAudioContext;
+              if (Ctx) {
+                const ctx = new Ctx();
+                if (ctx.state === 'suspended') ctx.resume();
+                console.log("🎵 AudioContext resumed (fallback)");
+              }
+            } catch (e) {
+              console.warn("Audio unlock failed:", e);
+            }
+            document.removeEventListener('touchstart', onFirstTouch);
+          }, { once: true });
+
         }).catch((message) => {
           alert(message);
         });
       };
+
       document.body.appendChild(script);
     </script>
   </body>
