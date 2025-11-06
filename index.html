@@ -9,20 +9,34 @@
     <!-- ✅ Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-    <!-- ✅ Preemptive Audio Unlock для Telegram iOS -->
+    <!-- ✅ iOS SAFARI AUDIO UNLOCK FIX -->
     <script>
       (function() {
-        document.addEventListener('touchstart', function unlock() {
+        let unlocked = false;
+        function iOSAudioUnlock() {
+          if (unlocked) return;
+          unlocked = true;
           try {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (Ctx) {
-              const ctx = new Ctx();
-              if (ctx.state === 'suspended') ctx.resume();
-              console.log('🎵 Preemptive AudioContext created');
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            window._unityAudioCtx = new AudioCtx();
+            const buffer = window._unityAudioCtx.createBuffer(1, 1, 22050);
+            const source = window._unityAudioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(window._unityAudioCtx.destination);
+            if (window._unityAudioCtx.state === 'suspended') {
+              window._unityAudioCtx.resume();
             }
-          } catch(e) { console.warn('Audio unlock pre-init failed:', e); }
-          document.removeEventListener('touchstart', unlock);
-        }, { once: true });
+            source.start(0);
+            console.log('🎵 iOS audio context unlocked before Unity load');
+          } catch (e) {
+            console.warn('iOS audio unlock failed:', e);
+          }
+          document.removeEventListener('touchstart', iOSAudioUnlock);
+          document.removeEventListener('click', iOSAudioUnlock);
+        }
+        document.addEventListener('touchstart', iOSAudioUnlock, { once: true });
+        document.addEventListener('click', iOSAudioUnlock, { once: true });
       })();
     </script>
   </head>
@@ -93,7 +107,6 @@
       }
 
       document.querySelector('#unity-loading-bar').style.display = 'block';
-
       var script = document.createElement('script');
       script.src = loaderUrl;
       script.onload = () => {
@@ -137,7 +150,7 @@
 
           trySendTelegramData();
 
-          /* ✅ AUDIO UNLOCK FIX після ініціалізації Unity */
+          /* ✅ AUDIO UNLOCK FALLBACK (Unity internal resume) */
           document.addEventListener('touchstart', function onFirstTouch() {
             try {
               if (unityInstance && unityInstance.Module && unityInstance.Module.resumeAudioContext) {
