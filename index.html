@@ -3,13 +3,12 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Unity Web Player | Telegram Christmass</title>
+    <title>Telegram Christmass</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
-    <!-- ✅ Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-    <!-- ✅ iOS SAFARI AUDIO UNLOCK FIX -->
+    <!-- ✅ iOS Safari / Telegram Audio Unlock -->
     <script>
       (function() {
         let unlocked = false;
@@ -18,19 +17,21 @@
           unlocked = true;
           try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!AudioCtx) return;
+            if (!AudioCtx) {
+              console.warn('❌ AudioContext unsupported');
+              return;
+            }
             window._unityAudioCtx = new AudioCtx();
             const buffer = window._unityAudioCtx.createBuffer(1, 1, 22050);
             const source = window._unityAudioCtx.createBufferSource();
             source.buffer = buffer;
             source.connect(window._unityAudioCtx.destination);
-            if (window._unityAudioCtx.state === 'suspended') {
+            if (window._unityAudioCtx.state === 'suspended')
               window._unityAudioCtx.resume();
-            }
             source.start(0);
-            console.log('🎵 iOS audio context unlocked before Unity load');
+            console.log('🎵 iOS audio unlocked before Unity load');
           } catch (e) {
-            console.warn('iOS audio unlock failed:', e);
+            console.warn('Audio unlock error:', e);
           }
           document.removeEventListener('touchstart', iOSAudioUnlock);
           document.removeEventListener('click', iOSAudioUnlock);
@@ -52,7 +53,6 @@
       </div>
       <div id="unity-warning"></div>
       <div id="unity-footer">
-        <div id="unity-logo-title-footer"></div>
         <div id="unity-fullscreen-button"></div>
         <div id="unity-build-title">Telegram Christmass</div>
       </div>
@@ -69,10 +69,10 @@
         var div = document.createElement('div');
         div.innerHTML = msg;
         warningBanner.appendChild(div);
-        if (type == 'error') div.style = 'background: red; padding: 10px;';
-        else {
-          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
-          setTimeout(function() {
+        if (type === 'error') div.style = 'background:red;padding:10px;';
+        else if (type === 'warning') {
+          div.style = 'background:yellow;padding:10px;';
+          setTimeout(() => {
             warningBanner.removeChild(div);
             updateBannerVisibility();
           }, 5000);
@@ -90,14 +90,14 @@
         streamingAssetsUrl: 'StreamingAssets',
         companyName: 'DefaultCompany',
         productName: 'Telegram Christmass',
-        productVersion: '0.0.2',
+        productVersion: '0.0.3',
         showBanner: unityShowBanner,
       };
 
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
         var meta = document.createElement('meta');
         meta.name = 'viewport';
-        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        meta.content = 'width=device-width,height=device-height,initial-scale=1.0,user-scalable=no,shrink-to-fit=yes';
         document.getElementsByTagName('head')[0].appendChild(meta);
         document.querySelector('#unity-container').className = 'unity-mobile';
         canvas.className = 'unity-mobile';
@@ -107,71 +107,53 @@
       }
 
       document.querySelector('#unity-loading-bar').style.display = 'block';
+
       var script = document.createElement('script');
       script.src = loaderUrl;
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
-          document.querySelector('#unity-progress-bar-full').style.width = 100 * progress + '%';
+          document.querySelector('#unity-progress-bar-full').style.width = (100 * progress) + '%';
         }).then((unityInstance) => {
           document.querySelector('#unity-loading-bar').style.display = 'none';
           document.querySelector('#unity-fullscreen-button').onclick = () => {
             unityInstance.SetFullscreen(1);
           };
 
-          /* ✅ Telegram Auth Sync */
-          let retryAttempts = 0;
-          const maxRetries = 5;
+          // ✅ Telegram → Unity auth sync
+          let tries = 0;
+          const maxTries = 5;
           const retryDelay = 1000;
 
-          function trySendTelegramData() {
+          function sendTelegramData() {
             if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe) {
               const initData = Telegram.WebApp.initDataUnsafe;
               if (unityInstance && typeof unityInstance.SendMessage === 'function') {
                 unityInstance.SendMessage('UserAuthHandler', 'OnTelegramAuth', JSON.stringify(initData));
-                console.log('📨 Data sent to Unity.');
-              } else {
-                console.warn('⚠️ Unity instance not ready. Retrying...');
-                retry();
+                console.log('📨 Telegram data sent to Unity');
               }
-            } else {
-              console.warn('⚠️ Telegram WebApp data not ready. Retrying...');
-              retry();
+            } else if (tries++ < maxTries) {
+              console.warn('Retrying Telegram data...');
+              setTimeout(sendTelegramData, retryDelay);
             }
           }
+          sendTelegramData();
 
-          function retry() {
-            retryAttempts++;
-            if (retryAttempts <= maxRetries) {
-              setTimeout(trySendTelegramData, retryDelay);
-            } else {
-              console.error('❌ Failed to get Telegram data after max retries.');
-            }
-          }
-
-          trySendTelegramData();
-
-          /* ✅ AUDIO UNLOCK FALLBACK (Unity internal resume) */
-          document.addEventListener('touchstart', function onFirstTouch() {
+          // ✅ Fallback: unlock after Unity init
+          document.addEventListener('touchstart', function onceTouch() {
             try {
-              if (unityInstance && unityInstance.Module && unityInstance.Module.resumeAudioContext) {
+              if (unityInstance.Module && unityInstance.Module.resumeAudioContext)
                 unityInstance.Module.resumeAudioContext();
-                console.log('🎧 Unity audio resumed via Module');
-              }
               const Ctx = window.AudioContext || window.webkitAudioContext;
               if (Ctx) {
                 const ctx = new Ctx();
                 if (ctx.state === 'suspended') ctx.resume();
-                console.log('🎵 AudioContext resumed (fallback)');
               }
-            } catch (e) {
-              console.warn('Audio unlock failed:', e);
-            }
-            document.removeEventListener('touchstart', onFirstTouch);
+              console.log('🎧 Audio resumed after Unity init');
+            } catch(e){ console.warn(e); }
+            document.removeEventListener('touchstart', onceTouch);
           }, { once: true });
 
-        }).catch((message) => {
-          alert(message);
-        });
+        }).catch(alert);
       };
       document.body.appendChild(script);
     </script>
