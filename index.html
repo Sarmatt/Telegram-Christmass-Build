@@ -6,67 +6,8 @@
     <title>Telegram Christmass</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
-    <!-- ✅ Telegram SDK -->
+    <!-- ✅ Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-    <!-- ✅ Automatic iOS / Safari Audio Unlock -->
-    <script>
-    (function() {
-      let unlocked = false;
-
-      async function unlockAudioContext() {
-        try {
-          const AudioCtx = window.AudioContext || window.webkitAudioContext;
-          if (!AudioCtx) return;
-
-          if (!window._unityAudioCtx)
-            window._unityAudioCtx = new AudioCtx();
-
-          const ctx = window._unityAudioCtx;
-
-          if (ctx.state === 'suspended') {
-            await ctx.resume();
-            console.log('🎧 iOS AudioContext resumed');
-          }
-
-          if (typeof unityInstance !== 'undefined' && unityInstance.Module?.resumeAudioContext) {
-            unityInstance.Module.resumeAudioContext();
-            console.log('🎵 Unity Audio resumed');
-          }
-        } catch (e) {
-          console.warn('Audio unlock error:', e);
-        }
-      }
-
-      // 1️⃣ Розблокування при першому жесті користувача
-      function onFirstGesture() {
-        if (unlocked) return;
-        unlocked = true;
-        unlockAudioContext();
-        document.removeEventListener('touchstart', onFirstGesture);
-        document.removeEventListener('click', onFirstGesture);
-      }
-
-      document.addEventListener('touchstart', onFirstGesture, { once: true });
-      document.addEventListener('click', onFirstGesture, { once: true });
-
-      // 2️⃣ Відновлення після повернення з Telegram / Safari
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          console.log('🔁 Page visible again — resuming audio...');
-          unlockAudioContext();
-        }
-      });
-
-      // 3️⃣ Періодична перевірка (на випадок, якщо Safari знов заморозить)
-      setInterval(() => {
-        if (window._unityAudioCtx && window._unityAudioCtx.state === 'suspended') {
-          console.log('🔄 Detected suspended context — trying to resume...');
-          unlockAudioContext();
-        }
-      }, 3000);
-    })();
-    </script>
   </head>
 
   <body>
@@ -94,7 +35,7 @@
         productVersion: '0.0.3'
       };
 
-      // ✅ Адаптація під мобільні
+      // ✅ Адаптація під мобільні пристрої
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
         const meta = document.createElement('meta');
         meta.name = 'viewport';
@@ -114,18 +55,15 @@
         }).then((unityInstance) => {
           document.querySelector('#unity-loading-bar').style.display = 'none';
 
-          // ✅ Telegram → Unity
-          if (window.Telegram?.WebApp?.initDataUnsafe) {
-            const data = window.Telegram.WebApp.initDataUnsafe;
-            unityInstance.SendMessage('UserAuthHandler', 'OnTelegramAuth', JSON.stringify(data));
-            console.log('📨 Telegram data sent to Unity');
+          // ✅ Передача Telegram даних у Unity
+          function sendTelegramData() {
+            if (window.Telegram?.WebApp?.initDataUnsafe) {
+              const initData = window.Telegram.WebApp.initDataUnsafe;
+              unityInstance.SendMessage('UserAuthHandler', 'OnTelegramAuth', JSON.stringify(initData));
+              console.log('📨 Telegram data sent to Unity');
+            }
           }
-
-          // ✅ Перше пробудження аудіо відразу після завантаження Unity
-          setTimeout(() => {
-            if (typeof unlockAudioContext === 'function') unlockAudioContext();
-          }, 500);
-
+          sendTelegramData();
         }).catch(alert);
       };
       document.body.appendChild(script);
