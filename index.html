@@ -6,8 +6,78 @@
     <title>Telegram Christmass</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
-    <!-- ✅ Telegram WebApp SDK -->
+
+    <!-- ✅ Telegram SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- ✅ Автоматичний unlock аудіо + Telegram expand -->
+    <script>
+      (function() {
+        let unlocked = false;
+
+        async function unlockAudioContext() {
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+
+            if (!window._unityAudioCtx)
+              window._unityAudioCtx = new AudioCtx();
+
+            const ctx = window._unityAudioCtx;
+            if (ctx.state === 'suspended') {
+              await ctx.resume();
+              console.log('🎧 iOS AudioContext resumed');
+            }
+
+            if (typeof unityInstance !== 'undefined' && unityInstance.Module?.resumeAudioContext) {
+              unityInstance.Module.resumeAudioContext();
+              console.log('🎵 Unity Audio resumed');
+            }
+          } catch (e) {
+            console.warn('Audio unlock error:', e);
+          }
+        }
+
+        // ✅ При першому дотику
+        function onFirstGesture() {
+          if (unlocked) return;
+          unlocked = true;
+          unlockAudioContext();
+          document.removeEventListener('touchstart', onFirstGesture);
+          document.removeEventListener('click', onFirstGesture);
+        }
+        document.addEventListener('touchstart', onFirstGesture, { once: true });
+        document.addEventListener('click', onFirstGesture, { once: true });
+
+        // ✅ При поверненні з Telegram або Safari
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) {
+            console.log('🔁 Page visible again — resuming audio...');
+            unlockAudioContext();
+          }
+        });
+
+        // ✅ Періодичний auto-resume
+        setInterval(() => {
+          if (window._unityAudioCtx && window._unityAudioCtx.state === 'suspended') {
+            console.log('🔄 Detected suspended context — trying to resume...');
+            unlockAudioContext();
+          }
+        }, 3000);
+
+        // ✅ Telegram auto-expand
+        window.addEventListener('DOMContentLoaded', () => {
+          if (window.Telegram?.WebApp) {
+            try {
+              window.Telegram.WebApp.expand();
+              console.log('🖥️ Telegram WebApp expanded to full screen');
+            } catch (e) {
+              console.warn('⚠️ Telegram expand failed:', e);
+            }
+          }
+        });
+      })();
+    </script>
   </head>
 
   <body>
@@ -55,15 +125,27 @@
         }).then((unityInstance) => {
           document.querySelector('#unity-loading-bar').style.display = 'none';
 
-          // ✅ Передача Telegram даних у Unity
-          function sendTelegramData() {
-            if (window.Telegram?.WebApp?.initDataUnsafe) {
-              const initData = window.Telegram.WebApp.initDataUnsafe;
-              unityInstance.SendMessage('UserAuthHandler', 'OnTelegramAuth', JSON.stringify(initData));
+          // ✅ Telegram авторизація + розгортання
+          if (window.Telegram?.WebApp) {
+            const webApp = window.Telegram.WebApp;
+            try {
+              webApp.expand();
+              console.log('🖥️ Telegram WebApp expanded');
+            } catch (e) {
+              console.warn('Expand failed', e);
+            }
+
+            if (webApp.initDataUnsafe) {
+              unityInstance.SendMessage('UserAuthHandler', 'OnTelegramAuth', JSON.stringify(webApp.initDataUnsafe));
               console.log('📨 Telegram data sent to Unity');
             }
           }
-          sendTelegramData();
+
+          // ✅ Пробудження аудіо після завантаження Unity
+          setTimeout(() => {
+            if (typeof unlockAudioContext === 'function') unlockAudioContext();
+          }, 800);
+
         }).catch(alert);
       };
       document.body.appendChild(script);
