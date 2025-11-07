@@ -113,7 +113,7 @@
 
       // 📦 Telegram дані
       let retryAttempts = 0;
-      const maxRetries = 10;
+      const maxRetries = 100;
       const retryDelay = 400;
 
       function trySendTelegramData(unityInstance) {
@@ -122,12 +122,15 @@
           if (initData && (initData.user || initData.hash)) {
             console.log('✅ Telegram initDataUnsafe received:', initData);
             unityInstance.SendMessage('TelegramAuthHandler', 'OnTelegramAuth', JSON.stringify(initData));
+            unityInstance.SendMessage('AuthProgressTextHandler', 'ReceiveMessage', 'Data sent to Unity.');
             console.log('📨 Data sent to Unity.');
           } else {
+            unityInstance.SendMessage('AuthProgressTextHandler', 'ReceiveMessage', 'Telegram data empty, retrying...');
             console.warn('⚠️ Telegram data empty, retrying...');
             retry(unityInstance);
           }
         } else {
+          unityInstance.SendMessage('AuthProgressTextHandler', 'ReceiveMessage', 'Telegram.WebApp not ready, retrying...');
           console.warn('⚠️ Telegram.WebApp not ready, retrying...');
           retry(unityInstance);
         }
@@ -138,6 +141,7 @@
         if (retryAttempts <= maxRetries) {
           setTimeout(() => trySendTelegramData(unityInstance), retryDelay);
         } else {
+           unityInstance.SendMessage('AuthProgressTextHandler', 'ReceiveMessage', 'Failed to get Telegram data after max retries.');
           console.error('❌ Failed to get Telegram data after max retries.');
         }
       }
