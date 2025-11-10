@@ -14,27 +14,31 @@
         height: 100%;
         overflow: hidden;
         background-color: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       #unity-container {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        position: relative;
+        width: 1080px;
+        height: 1920px;
         overflow: hidden;
+        background: #000;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+        border-radius: 20px;
       }
 
       #unity-canvas {
         width: 100%;
         height: 100%;
-        background: #000;
         display: block;
+        background: #000;
       }
 
       #unity-loading-bar {
         position: absolute;
-        bottom: 20px;
+        bottom: 40px;
         left: 50%;
         transform: translateX(-50%);
         width: 60%;
@@ -50,32 +54,35 @@
         background: #fff;
         transition: width 0.2s;
       }
+
+      /* 📱 На мобільному — фулскрін */
+      @media (max-width: 1080px) {
+        html, body {
+          display: block;
+        }
+        #unity-container {
+          width: 100vw;
+          height: 100vh;
+          border-radius: 0;
+          box-shadow: none;
+        }
+      }
     </style>
 
-    <!-- ✅ Telegram SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-    <!-- ✅ Автоматичний unlock аудіо + Telegram expand -->
     <script>
       (function () {
         let unlocked = false;
-
-        // 🔊 Глобальний аудіо unlock
         window.unlockAudioContext = async function () {
           try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return;
             if (!window._unityAudioCtx) window._unityAudioCtx = new AudioCtx();
-
             const ctx = window._unityAudioCtx;
             if (ctx.state === "suspended") await ctx.resume();
-
-            if (
-              typeof unityInstance !== "undefined" &&
-              unityInstance?.Module?.resumeAudioContext
-            )
+            if (typeof unityInstance !== "undefined" && unityInstance?.Module?.resumeAudioContext)
               unityInstance.Module.resumeAudioContext();
-
             console.log("🎵 Audio resumed");
           } catch (e) {
             console.warn("Audio unlock error:", e);
@@ -89,43 +96,19 @@
           document.removeEventListener("touchstart", onFirstGesture);
           document.removeEventListener("click", onFirstGesture);
         }
-
         document.addEventListener("touchstart", onFirstGesture, { once: true });
         document.addEventListener("click", onFirstGesture, { once: true });
 
         document.addEventListener("visibilitychange", () => {
-          if (!document.hidden) {
-            console.log("🔁 Page visible again — resuming audio...");
-            unlockAudioContext();
-          }
+          if (!document.hidden) unlockAudioContext();
         });
-
-        setInterval(() => {
-          if (
-            window._unityAudioCtx &&
-            window._unityAudioCtx.state === "suspended"
-          ) {
-            console.log("🔄 Detected suspended context — trying to resume...");
-            unlockAudioContext();
-          }
-        }, 3000);
 
         window.addEventListener("DOMContentLoaded", () => {
           if (window.Telegram?.WebApp) {
             try {
               window.Telegram.WebApp.expand();
-              console.log("🖥️ Telegram WebApp expanded to full screen");
-            } catch (e) {
-              console.warn("⚠️ Telegram expand failed:", e);
-            }
-
-            // 🔁 Повторна спроба розширення (деякі версії Desktop ігнорують першу)
-            setTimeout(() => {
-              try {
-                window.Telegram?.WebApp?.expand();
-                console.log("🖥️ Telegram expanded (retry)");
-              } catch {}
-            }, 1500);
+              console.log("🖥️ Telegram WebApp expanded");
+            } catch {}
           }
         });
       })();
@@ -155,17 +138,9 @@
         productVersion: "0.0.3",
       };
 
-      document.querySelector("#unity-loading-bar").style.display = "block";
-
-      // 📦 Очікування Telegram даних
       async function waitForTelegramData(unityInstance, timeoutMs = 7000) {
         if (!window.Telegram || !Telegram.WebApp) {
-          unityInstance.SendMessage(
-            "AuthProgressTextHandler",
-            "ReceiveMessage",
-            "❌ Telegram WebApp not found."
-          );
-          console.warn("❌ Telegram WebApp not found.");
+          unityInstance.SendMessage("AuthProgressTextHandler", "ReceiveMessage", "❌ Telegram WebApp not found.");
           return false;
         }
 
@@ -173,102 +148,35 @@
         try {
           webApp.ready();
           webApp.expand();
-          unityInstance.SendMessage(
-            "AuthProgressTextHandler",
-            "ReceiveMessage",
-            "✅ Telegram WebApp ready..."
-          );
-        } catch (e) {
-          console.warn("Telegram ready/expand failed:", e);
-        }
+        } catch (e) {}
 
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
           const data = webApp.initDataUnsafe;
           if (data && (data.user || data.hash)) {
-            console.log("✅ Telegram initDataUnsafe received:", data);
-            unityInstance.SendMessage(
-              "TelegramAuthHandler",
-              "OnTelegramAuth",
-              JSON.stringify(data)
-            );
-            unityInstance.SendMessage(
-              "AuthProgressTextHandler",
-              "ReceiveMessage",
-              "✅ Telegram data received and sent to Unity."
-            );
+            unityInstance.SendMessage("TelegramAuthHandler", "OnTelegramAuth", JSON.stringify(data));
             return true;
           }
-
-          unityInstance.SendMessage(
-            "AuthProgressTextHandler",
-            "ReceiveMessage",
-            "⏳ Waiting for Telegram data..."
-          );
           await new Promise((r) => setTimeout(r, 300));
         }
 
-        unityInstance.SendMessage(
-          "AuthProgressTextHandler",
-          "ReceiveMessage",
-          "❌ Telegram data not received (timeout)."
-        );
-        console.warn("❌ Telegram data empty after timeout");
         return false;
       }
 
-      // 🧩 Створення Unity instance
       const script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
-          document.querySelector("#unity-progress-bar-full").style.width =
-            100 * progress + "%";
+          document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
         })
           .then(async (unityInstance) => {
             document.querySelector("#unity-loading-bar").style.display = "none";
+            const gotData = await waitForTelegramData(unityInstance, 7000);
+            if (!gotData) console.warn("⚠️ Telegram data not received.");
 
-            let telegramAvailable =
-              typeof Telegram !== "undefined" && Telegram.WebApp;
-            if (telegramAvailable) {
-              const gotData = await waitForTelegramData(unityInstance, 7000);
-              if (!gotData) {
-                console.warn(
-                  "⚠️ Telegram data not received — maybe opened outside Telegram."
-                );
-              }
-            } else {
-              console.warn("⚠️ Telegram SDK not found — running in browser fallback mode.");
-              unityInstance.SendMessage(
-                "AuthProgressTextHandler",
-                "ReceiveMessage",
-                "🌐 Running outside Telegram (browser/desktop mode)."
-              );
-
-              // 🧩 Мок-користувач для тестування
-              const mockData = {
-                user: { id: 0, first_name: "Guest", last_name: "", username: "BrowserUser" },
-                hash: "mock_hash",
-              };
-              unityInstance.SendMessage(
-                "TelegramAuthHandler",
-                "OnTelegramAuth",
-                JSON.stringify(mockData)
-              );
-            }
-
-            // 🔈 Пробудження аудіо після старту
             setTimeout(() => {
               if (typeof unlockAudioContext === "function") unlockAudioContext();
             }, 800);
-
-            // 🪟 Ресайз під вікно
-            function resizeCanvas() {
-              canvas.width = window.innerWidth;
-              canvas.height = window.innerHeight;
-            }
-            window.addEventListener("resize", resizeCanvas);
-            resizeCanvas();
           })
           .catch(alert);
       };
