@@ -7,6 +7,51 @@
     <link rel="shortcut icon" href="TemplateData/favicon.ico" />
     <link rel="stylesheet" href="TemplateData/style.css" />
 
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background-color: #000;
+      }
+
+      #unity-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      #unity-canvas {
+        width: 100%;
+        height: 100%;
+        background: #000;
+        display: block;
+      }
+
+      #unity-loading-bar {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60%;
+        height: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+
+      #unity-progress-bar-full {
+        width: 0%;
+        height: 100%;
+        background: #fff;
+        transition: width 0.2s;
+      }
+    </style>
+
     <!-- ✅ Telegram SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
@@ -15,7 +60,7 @@
       (function () {
         let unlocked = false;
 
-        // 🔊 Робимо глобальним
+        // 🔊 Глобальний аудіо unlock
         window.unlockAudioContext = async function () {
           try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -44,6 +89,7 @@
           document.removeEventListener("touchstart", onFirstGesture);
           document.removeEventListener("click", onFirstGesture);
         }
+
         document.addEventListener("touchstart", onFirstGesture, { once: true });
         document.addEventListener("click", onFirstGesture, { once: true });
 
@@ -72,6 +118,14 @@
             } catch (e) {
               console.warn("⚠️ Telegram expand failed:", e);
             }
+
+            // 🔁 Повторна спроба розширення (деякі версії Desktop ігнорують першу)
+            setTimeout(() => {
+              try {
+                window.Telegram?.WebApp?.expand();
+                console.log("🖥️ Telegram expanded (retry)");
+              } catch {}
+            }, 1500);
           }
         });
       })();
@@ -79,12 +133,10 @@
   </head>
 
   <body>
-    <div id="unity-container" class="unity-desktop">
-      <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+    <div id="unity-container">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
       <div id="unity-loading-bar">
-        <div id="unity-progress-bar-empty">
-          <div id="unity-progress-bar-full"></div>
-        </div>
+        <div id="unity-progress-bar-full"></div>
       </div>
     </div>
 
@@ -103,20 +155,9 @@
         productVersion: "0.0.3",
       };
 
-      // 📱 Мобільна адаптація
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        const meta = document.createElement("meta");
-        meta.name = "viewport";
-        meta.content =
-          "width=device-width, height=device-height, initial-scale=1.0, user-scalable=no";
-        document.head.appendChild(meta);
-        document.querySelector("#unity-container").className = "unity-mobile";
-        canvas.className = "unity-mobile";
-      }
-
       document.querySelector("#unity-loading-bar").style.display = "block";
 
-      // 📦 Надійне очікування Telegram даних
+      // 📦 Очікування Telegram даних
       async function waitForTelegramData(unityInstance, timeoutMs = 7000) {
         if (!window.Telegram || !Telegram.WebApp) {
           unityInstance.SendMessage(
@@ -176,7 +217,7 @@
         return false;
       }
 
-      // 🧩 Unity створення
+      // 🧩 Створення Unity instance
       const script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
@@ -187,15 +228,47 @@
           .then(async (unityInstance) => {
             document.querySelector("#unity-loading-bar").style.display = "none";
 
-            const gotData = await waitForTelegramData(unityInstance, 7000);
-            if (!gotData) {
-              console.warn("⚠️ Telegram data not received — maybe opened outside Telegram.");
+            let telegramAvailable =
+              typeof Telegram !== "undefined" && Telegram.WebApp;
+            if (telegramAvailable) {
+              const gotData = await waitForTelegramData(unityInstance, 7000);
+              if (!gotData) {
+                console.warn(
+                  "⚠️ Telegram data not received — maybe opened outside Telegram."
+                );
+              }
+            } else {
+              console.warn("⚠️ Telegram SDK not found — running in browser fallback mode.");
+              unityInstance.SendMessage(
+                "AuthProgressTextHandler",
+                "ReceiveMessage",
+                "🌐 Running outside Telegram (browser/desktop mode)."
+              );
+
+              // 🧩 Мок-користувач для тестування
+              const mockData = {
+                user: { id: 0, first_name: "Guest", last_name: "", username: "BrowserUser" },
+                hash: "mock_hash",
+              };
+              unityInstance.SendMessage(
+                "TelegramAuthHandler",
+                "OnTelegramAuth",
+                JSON.stringify(mockData)
+              );
             }
 
-            // 🔈 Пробудження аудіо
+            // 🔈 Пробудження аудіо після старту
             setTimeout(() => {
               if (typeof unlockAudioContext === "function") unlockAudioContext();
             }, 800);
+
+            // 🪟 Ресайз під вікно
+            function resizeCanvas() {
+              canvas.width = window.innerWidth;
+              canvas.height = window.innerHeight;
+            }
+            window.addEventListener("resize", resizeCanvas);
+            resizeCanvas();
           })
           .catch(alert);
       };
