@@ -154,7 +154,6 @@
         while (Date.now() - start < timeoutMs) {
           const data = webApp.initDataUnsafe;
           if (data && (data.user || data.hash)) {
-            console.log(data);
             unityInstance.SendMessage("TelegramAuthHandler", "OnTelegramAuth", JSON.stringify(data));
             return true;
           }
